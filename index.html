@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Vườn Tulip Đêm - Kim Phút Kim Giờ</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: black;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #counter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #777777;
+            font-size: 16px;
+            pointer-events: none;
+        }
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+        .ctrl-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            outline: none;
+            transition: background 0.2s;
+        }
+        .ctrl-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+        /* Ẩn player YouTube ngầm */
+        #youtube-player-container {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="counter"></div>
+    
+    <div id="mobile-controls">
+        <button class="ctrl-btn" id="music-btn" onclick="toggleMusic()">🎵 Bật/Tắt Nhạc</button>
+        <button class="ctrl-btn" onclick="triggerGarden()">🌱 Cả vườn</button>
+        <button class="ctrl-btn" onclick="triggerFirework()">🎆 Pháo hoa</button>
+        <button class="ctrl-btn" onclick="clearGarden()">🗑️ Xoá</button>
+    </div>
+
+    <!-- Nhúng iframe YouTube chạy bài Kim Phút Kim Giờ (g1HrVjV2OUs) -->
+    <div id="youtube-player-container">
+        <iframe id="yt-audio" width="100" height="100" src="https://www.youtube.com/embed/g1HrVjV2OUs?enablejsapi=1&autoplay=1&loop=1&playlist=g1HrVjV2OUs" frameborder="0"></iframe>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <!-- Tải API YouTube iFrame để điều khiển nhạc mượt mà -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        let ytPlayer = null;
+        let isPlaying = false;
+
+        function onYouTubeIframeAPIReady() {
+            ytPlayer = new YT.Player('yt-audio', {
+                events: {
+                    'onReady': (event) => {
+                        // Thử phát ngay khi sẵn sàng
+                        event.target.playVideo();
+                    }
+                }
+            });
+        }
+
+        // Tự động kích hoạt phát nhạc khi chạm/click màn hình lần đầu (vượt qua cơ chế chặn của trình duyệt)
+        function tryPlayMusicOnInteraction() {
+            if (!isPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+                try {
+                    ytPlayer.unMute();
+                    ytPlayer.setVolume(80);
+                    ytPlayer.playVideo();
+                    isPlaying = true;
+                } catch (e) {}
+            }
+        }
+
+        function toggleMusic() {
+            if (!ytPlayer) return;
+            if (isPlaying) {
+                ytPlayer.pauseVideo();
+                isPlaying = false;
+                document.getElementById("music-btn").innerText = "🎵 Bật nhạc";
+            } else {
+                ytPlayer.unMute();
+                ytPlayer.playVideo();
+                isPlaying = true;
+                document.getElementById("music-btn").innerText = "🔇 Tắt nhạc";
+            }
+        }
+
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Đồ Họa Vườn Tulip
+        const MAX_TULIPS = 50;
+        let mouse = { x: -9999, y: -9999, isDown: false };
+        let lastPlant = { x: -999, y: -999 };
+
+        function clamp(x, a = 0.0, b = 1.0) { return Math.max(a, Math.min(b, x)); }
+        function easeOut(x) { return 1 - Math.pow(1 - x, 3); }
+        function easeInOut(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+        function easeOutBack(x) {
+            const c1 = 1.70158, c3 = c1 + 1;
+            return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+        }
+
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+            if (s === 0) { r = g = b = l; } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1; if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function rgbHex(rgb, k = 1.0) {
+            const r = Math.max(0, Math.min(255, Math.floor(rgb[0] * k)));
+            const g = Math.max(0, Math.min(255, Math.floor(rgb[1] * k)));
+            const b = Math.max(0, Math.min(255, Math.floor(rgb[2] * k)));
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        function transformPoints(points, angle, scale, ox, oy) {
+            const c = Math.cos(angle), s = Math.sin(angle);
+            let out = [];
+            for (let p of points) {
+                let x = p[0] * scale, y = p[1] * scale;
+                out.push([ox + x * c - y * s, oy + x * s + y * c]);
+            }
+            return out;
+        }
+
+        function petalShape(w, h) {
+            return [
+                [0, 0], [w * 0.7, -h * 0.2], [w, -h * 0.55], [w * 0.55, -h * 0.95],
+                [0, -h * 0.82], [-w * 0.55, -h * 0.95], [-w, -h * 0.55], [-w * 0.7, -h * 0.2]
+            ];
+        }
+
+        function drawSmoothPolygon(ctx, points, fillStyle) {
+            if (points.length < 3) return;
+            ctx.beginPath();
+            ctx.moveTo(points[0][0], points[0][1]);
+            for (let i = 0; i < points.length; i++) {
+                let p0 = points[i], p1 = points[(i + 1) % points.length];
+                let mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+                ctx.quadraticCurveTo(p0[0], p0[1], mx, my);
+            }
+            ctx.fillStyle = fillStyle;
+            ctx.fill();
+        }
+
+        let stars = [];
+        function makeStars() {
+            stars = [];
+            for (let i = 0; i < 220; i++) {
+                let x = Math.random() * 2000, y = Math.random() * 800 * Math.random();
+                let r = [0.6, 0.8, 1.0, 1.0, 1.5][Math.floor(Math.random() * 5)];
+                stars.push({ x, y, r, base: Math.random() * 0.7 +
